@@ -34,6 +34,14 @@ BALANCED_TRAIN_URL = 'http://storage.googleapis.com/us_audioset/youtube_corpus/v
 UNBALANCED_TRAIN_URL = 'http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/unbalanced_train_segments.csv'
 
 
+# RUN:
+# python.exe .\download_audioset.py \
+#   -f C:\Users\sergiym\tools\ffmpeg-4.2.1-win64-static\bin\ffmpeg.exe \
+#   -fp C:\Users\sergiym\tools\ffmpeg-4.2.1-win64-static\bin\ffprobe.exe \
+#   -n 1 -nr 1 -v \
+#   -af mp3 -ac mp3 -vm novideo .
+
+
 def parse_arguments():
     """
     Parse arguments from the command line
@@ -411,7 +419,7 @@ def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_p
         ts_end = ts_start + duration
         end_past_video_end = True
 
-    if video_mode in ('bestvideo', 'bestvideowithaudio'):
+    if video_mode in ('bestvideo', 'bestvideowithaudio', 'novideo'):
         best_video = video.getbestvideo()
         # If there isn't a video only option, go with best video with audio
         if best_video is None:
@@ -443,16 +451,18 @@ def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_p
                          '-ar', str(audio_sample_rate),
                          '-vn',
                          '-ac', str(audio_info['channels']),
-                         '-sample_fmt', 's{}'.format(audio_bit_depth),
+                         # '-sample_fmt', 's{}'.format(audio_bit_depth),
                          '-f', audio_format,
                          '-acodec', audio_codec]
     ffmpeg(ffmpeg_path, best_audio_url, audio_filepath,
            input_args=audio_input_args, output_args=audio_output_args,
-           num_retries=num_retries, validation_callback=validate_audio,
+           num_retries=num_retries, # validation_callback=validate_audio,
            validation_args={'audio_info': audio_info,
                             'end_past_video_end': end_past_video_end})
 
-    if video_mode != 'bestvideowithaudio':
+    if video_mode == 'novideo':
+        video_filepath = None
+    elif video_mode != 'bestvideowithaudio':
         # Download the video
         video_input_args = ['-n', '-ss', str(ts_start)]
         video_output_args = ['-t', str(duration),
@@ -668,10 +678,14 @@ def download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
                 media_filename = get_media_filename(ytid, ts_start, ts_end)
                 video_filepath = os.path.join(data_dir, 'video', media_filename + '.' + ffmpeg_cfg.get('video_format', 'mp4'))
                 audio_filepath = os.path.join(data_dir, 'audio', media_filename + '.' + ffmpeg_cfg.get('audio_format', 'flac'))
-                if os.path.exists(video_filepath) and os.path.exists(audio_filepath):
-                    info_msg = 'Already downloaded video {} ({} - {}). Skipping.'
+                if os.path.exists(audio_filepath):
+                    info_msg = 'Already downloaded audio {} ({} - {}). Skipping.'
                     LOGGER.info(info_msg.format(ytid, ts_start, ts_end))
                     continue
+                # if os.path.exists(video_filepath) and os.path.exists(audio_filepath):
+                #     info_msg = 'Already downloaded video {} ({} - {}). Skipping.'
+                #     LOGGER.info(info_msg.format(ytid, ts_start, ts_end))
+                #     continue
 
                 worker_args = [ytid, ts_start, ts_end, data_dir, ffmpeg_path, ffprobe_path]
                 pool.apply_async(partial(segment_mp_worker, **ffmpeg_cfg), worker_args)

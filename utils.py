@@ -28,6 +28,7 @@ def run_command(cmd, **kwargs):
         return_code:  Exit/return code from running command
                       (Type: int)
     """
+    # print("RUN: " + " ".join(cmd), kwargs)
     proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, **kwargs)
     stdout, stderr = proc.communicate()
 
