@@ -8,15 +8,16 @@ class Ontology:
 
     def __init__(self, fname):
         self._nodes = {node['id']: node for node in json.load(open(fname))}
+        self._nodes_by_name = {node['name']: node for node in self._nodes.values()}
 
     def get(self, node_id, default=None):
         return self._nodes.get(node_id, default)
 
+    def get_by_name(self, name, default=None):
+        return self._nodes_by_name.get(name, default)
+
     def names(self, ids):
         return [self._nodes.get(n, {}).get('name', n) for n in ids]
-
-    def any(self, ids):
-        return self._nodes
 
     def graph(self, fname, subgraph=None):
         with open(fname, "wt") as f:
@@ -42,10 +43,11 @@ class Ontology:
         return children_dict
 
 
-def read_categories(fname):
-    data = pandas.read_csv(fname, sep="\t", header=None, names=["label", "quality", "num"])
+def read_categories(fname, ontology):
+    data = pandas.read_csv(fname, sep="\t", header=None, names=["name", "quality", "num"])
     data.quality = data.quality.apply(lambda s: float('0' + s[:-1]) / 100.)
     data.num = data.num.apply(lambda s: int(s.replace(',', '')))
+    data['label'] = data.name.apply(lambda n: ontology.get_by_name(n, {}).get('id'))
     return data
 
 
@@ -60,14 +62,11 @@ def main(fname, skip_cat=None):
         fname, skiprows=3, skipinitialspace=True, header=None,
         names=["YTID", "start_seconds", "end_seconds", "positive_labels"])
 
-    accuracy = read_categories("accuracy.tsv")
-    include_names = frozenset(accuracy.label[accuracy.quality >= 0.9])
-    include = frozenset(node['id'] for node in ontology._nodes.values()
-                        if node['name'] in include_names)
+    accuracy = read_categories("accuracy.tsv", ontology)
+    accuracy = accuracy[accuracy.quality >= 0.9]
 
-    exclude_names = frozenset(read_categories("exclude.tsv").label)
-    exclude = frozenset(node['id'] for node in ontology._nodes.values()
-                        if node['name'] in exclude_names)
+    include = frozenset(accuracy.label)
+    exclude = frozenset(read_categories("exclude.tsv", ontology).label)
 
     select = include.difference(skipset.union(exclude))
 
@@ -83,6 +82,6 @@ if __name__ == "__main__":
     # ontology.graph("ontology-human.dot", subgraph=ontology.children('/m/0dgw9r'))
 
     data = main("unbalanced_train_segments.csv")  # skip_cat='/m/0dgw9r')  # all human sounds
-    data.YTID.to_csv(
-        "unbalanced_ytids_no_human_v3.txt",
-        index=False, header=False, line_terminator='\n')
+    data.positive_labels = data.positive_labels.apply(",".join)
+    data.to_csv("unbalanced_train_segments_no_human.csv", index=False, header=False,
+                line_terminator='\n', float_format="%.3f")
