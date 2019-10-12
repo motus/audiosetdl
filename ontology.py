@@ -19,27 +19,42 @@ class Ontology:
     def names(self, ids):
         return [self._nodes.get(n, {}).get('name', n) for n in ids]
 
-    def graph(self, fname, subgraph=None):
+    def graph(self, fname, subgraph=None, highlight=frozenset()):
+
         with open(fname, "wt") as f:
-            f.write("digraph G {\n")
+
             all_nodes = self._nodes.values()
             if subgraph:
                 all_nodes = [node for node in self._nodes.values() if node['id'] in subgraph]
+
+            f.write("digraph G {\n")
             for node in all_nodes:
-                f.write('  "%s" [label="%s"];\n' % (node['id'], node['name']))
+                node_id = node['id']
+                f.write('  "%s" [label="%s"%s];\n' % (
+                        node_id, node['name'], ", style=filled" if node_id in highlight else ""))
                 children = node.get("child_ids")
                 if children:
-                    f.write('  "%s" -> { "%s" };\n' % (node['id'], '","'.join(children)))
+                    f.write('  "%s" -> { "%s" };\n' % (node_id, '","'.join(children)))
             f.write("}\n")
 
-    def children(self, node_id, children_dict=None):
+    def all_children(self, node_ids, children_dict=None):
         if children_dict is None:
             children_dict = {}
+        for node_id in node_ids:
+            self.children(node_id, children_dict)
+        return children_dict
+
+    def children(self, node_id, children_dict=None):
+
+        if children_dict is None:
+            children_dict = {}
+
         node = self._nodes.get(node_id)
         if node:
             children_dict[node_id] = node.get('name')
             for n in node.get('child_ids', []):
                 self.children(n, children_dict)
+
         return children_dict
 
 
@@ -51,11 +66,12 @@ def read_categories(fname, ontology):
     return data
 
 
-def main(fname, skip_cat=None):
+def main(fname, ontology, skip_cat=None):
 
-    ontology = Ontology("ontology.json")
     skipset = frozenset()
     if skip_cat is not None:
+        # skip_cat = '/m/0dgw9r'  # all human sounds
+        # skip_cat = '/m/09l8g'   # human voice subcategory
         skipset = frozenset(ontology.children(skip_cat).keys())
 
     data = pandas.read_csv(
@@ -66,7 +82,7 @@ def main(fname, skip_cat=None):
     accuracy = accuracy[accuracy.quality >= 0.9]
 
     include = frozenset(accuracy.label)
-    exclude = frozenset(read_categories("exclude.tsv", ontology).label)
+    exclude = frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label))
 
     select = include.difference(skipset.union(exclude))
 
@@ -78,10 +94,13 @@ def main(fname, skip_cat=None):
 
 if __name__ == "__main__":
 
-    # ontology = Ontology("ontology.json")
-    # ontology.graph("ontology-human.dot", subgraph=ontology.children('/m/0dgw9r'))
+    ontology = Ontology("ontology.json")
+    ontology.graph(
+        "ontology-human.dot",
+        subgraph=ontology.children('/m/0dgw9r'),
+        highlight=frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label)))
 
-    data = main("unbalanced_train_segments.csv")  # skip_cat='/m/0dgw9r')  # all human sounds
-    data.positive_labels = data.positive_labels.apply(",".join)
-    data.to_csv("unbalanced_train_segments_no_human.csv", index=False, header=False,
-                line_terminator='\n', float_format="%.3f")
+    # data = main("unbalanced_train_segments.csv", ontology)
+    # data.positive_labels = data.positive_labels.apply(",".join)
+    # data.to_csv("unbalanced_train_segments_no_human.csv", index=False, header=False,
+    #             line_terminator='\n', float_format="%.3f")
