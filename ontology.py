@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import json
+import itertools
+
 import pandas
 
 
@@ -21,12 +23,11 @@ class Ontology:
 
     def graph(self, fname, subgraph=None, highlight=frozenset()):
 
+        all_nodes = self._nodes.values()
+        if subgraph:
+            all_nodes = [node for node in self._nodes.values() if node['id'] in subgraph]
+
         with open(fname, "wt") as f:
-
-            all_nodes = self._nodes.values()
-            if subgraph:
-                all_nodes = [node for node in self._nodes.values() if node['id'] in subgraph]
-
             f.write("digraph G {\n")
             for node in all_nodes:
                 node_id = node['id']
@@ -56,6 +57,17 @@ class Ontology:
                 self.children(n, children_dict)
 
         return children_dict
+
+    def top(self, level=0):
+        nodes = set(self._nodes.keys())
+        for node in self._nodes.values():
+            nodes.difference_update(node.get('child_ids', {}))
+        frontier = nodes
+        for _i in range(level):
+            frontier = frozenset(itertools.chain.from_iterable(
+                self._nodes[node_id].get('child_ids', {}) for node_id in frontier))
+            nodes.update(frontier)
+        return nodes
 
 
 def read_categories(fname, ontology):
