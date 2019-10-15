@@ -9,8 +9,15 @@ import pandas
 class Ontology:
 
     def __init__(self, fname):
-        self._nodes = {node['id']: node for node in json.load(open(fname))}
-        self._nodes_by_name = {node['name']: node for node in self._nodes.values()}
+        self._nodes = {}
+        for node in json.load(open(fname)):
+            node['parents'] = []
+            self._nodes[node['id']] = node
+        self._nodes_by_name = {}
+        for node in list(self._nodes.values()):
+            for node_id in node.get('child_ids', []):
+                self._nodes[node_id]['parents'].append(node['id'])
+            self._nodes_by_name[node['name']] = node
 
     def get(self, node_id, default=None):
         return self._nodes.get(node_id, default)
@@ -45,18 +52,21 @@ class Ontology:
             self.children(node_id, children_dict)
         return children_dict
 
-    def children(self, node_id, children_dict=None):
+    def children(self, node_id, collect_dict=None):
+        return self.paths('child_ids', node_id, collect_dict)
 
-        if children_dict is None:
-            children_dict = {}
+    def parents(self, node_id, collect_dict=None):
+        return self.paths('parents', node_id, collect_dict)
 
+    def paths(self, attr_name, node_id, collect_dict=None):
+        if collect_dict is None:
+            collect_dict = {}
         node = self._nodes.get(node_id)
         if node:
-            children_dict[node_id] = node.get('name')
-            for n in node.get('child_ids', []):
-                self.children(n, children_dict)
-
-        return children_dict
+            collect_dict[node_id] = node.get('name')
+            for n in node.get(attr_name, []):
+                self.paths(attr_name, n, collect_dict)
+        return collect_dict
 
     def top(self, level=0):
         nodes = set(self._nodes.keys())
@@ -89,6 +99,7 @@ def main(fname, ontology, skip_cat=None):
     data = pandas.read_csv(
         fname, skiprows=3, skipinitialspace=True, header=None,
         names=["YTID", "start_seconds", "end_seconds", "positive_labels"])
+    data.positive_labels = data.positive_labels.apply(lambda s: s.split(','))
 
     accuracy = read_categories("accuracy.tsv", ontology)
     accuracy = accuracy[accuracy.quality >= 0.9]
@@ -98,7 +109,6 @@ def main(fname, ontology, skip_cat=None):
 
     select = include.difference(skipset.union(exclude))
 
-    data.positive_labels = data.positive_labels.apply(lambda s: s.split(','))
     data = data[data.positive_labels.apply(select.issuperset)]
 
     return data
