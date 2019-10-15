@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import random
 import itertools
 
 import pandas
@@ -88,6 +89,32 @@ def read_categories(fname, ontology):
     return data
 
 
+def stratified_sample(data, ontology, categories, threshold):
+    idx = set()
+    for cat in categories:
+        size = threshold - data.loc[idx].positive_labels.apply(lambda s: cat in s).sum()
+        print(f"*** select {size} for {ontology.names([cat])}")
+        if size > 0:
+            select = data.positive_labels.apply(lambda s: cat in s).index.to_list()
+            sample = random.sample(select, size)
+            print(data.loc[sample])
+            idx.update(sample)
+    return data.loc[idx]
+
+
+def load_selection_set(ontology, skipset=frozenset(), threshold=0.9):
+    accuracy = read_categories("accuracy.tsv", ontology)
+    accuracy = accuracy[accuracy.quality >= threshold]
+    include = frozenset(accuracy.label)
+    exclude = frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label))
+    select = include.difference(skipset.union(exclude))
+    accuracy = accuracy[accuracy.label.apply(select.__contains__)]
+    return accuracy.label[accuracy.num.sort_values().index].to_list()
+
+
+_CAT_SAMPLE_SIZE = 1
+
+
 def main(fname, ontology, skip_cat=None):
 
     skipset = frozenset()
@@ -99,17 +126,12 @@ def main(fname, ontology, skip_cat=None):
     data = pandas.read_csv(
         fname, skiprows=3, skipinitialspace=True, header=None,
         names=["YTID", "start_seconds", "end_seconds", "positive_labels"])
-    data.positive_labels = data.positive_labels.apply(lambda s: s.split(','))
+    data.positive_labels = data.positive_labels.apply(lambda s: frozenset(s.split(',')))
 
-    accuracy = read_categories("accuracy.tsv", ontology)
-    accuracy = accuracy[accuracy.quality >= 0.9]
+    select = load_selection_set(ontology, skipset)
+    data = data[data.positive_labels.apply(frozenset(select).issuperset)]
 
-    include = frozenset(accuracy.label)
-    exclude = frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label))
-
-    select = include.difference(skipset.union(exclude))
-
-    data = data[data.positive_labels.apply(select.issuperset)]
+    data = stratified_sample(data, ontology, select, _CAT_SAMPLE_SIZE)
 
     return data
 
@@ -117,12 +139,12 @@ def main(fname, ontology, skip_cat=None):
 if __name__ == "__main__":
 
     ontology = Ontology("ontology.json")
-    ontology.graph(
-        "ontology-human.dot",
-        subgraph=ontology.children('/m/0dgw9r'),
-        highlight=frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label)))
+    # ontology.graph(
+    #     "ontology-human.dot",
+    #     subgraph=ontology.children('/m/0dgw9r'),
+    #     highlight=frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label)))
 
-    # data = main("unbalanced_train_segments.csv", ontology)
-    # data.positive_labels = data.positive_labels.apply(",".join)
-    # data.to_csv("unbalanced_train_segments_no_human.csv", index=False, header=False,
-    #             line_terminator='\n', float_format="%.3f")
+    data = main("unbalanced_train_segments.csv", ontology)
+    data.positive_labels = data.positive_labels.apply(",".join)
+    data.to_csv("unbalanced_train_segments_no_human_stratified_%d.csv" % _CAT_SAMPLE_SIZE,
+                index=False, header=False, line_terminator='\n', float_format="%.3f")
