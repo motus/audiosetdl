@@ -142,7 +142,8 @@ if __name__ == "__main__":
     # ontology.graph(
     #     "ontology-human.dot",
     #     subgraph=ontology.children('/m/0dgw9r'),
-    #     highlight=frozenset(ontology.all_children(read_categories("exclude.tsv", ontology).label)))
+    #     highlight=frozenset(ontology.all_children(
+    #         read_categories("exclude.tsv", ontology).label)))
 
     data = main("unbalanced_train_segments.csv", ontology)
     data.positive_labels = data.positive_labels.apply(",".join)
