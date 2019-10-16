@@ -93,11 +93,11 @@ def stratified_sample(data, ontology, categories, threshold):
     idx = set()
     for cat in categories:
         size = threshold - data.loc[idx].positive_labels.apply(lambda s: cat in s).sum()
-        print(f"*** select {size} for {ontology.names([cat])}")
+        print(f"*** select {size} for {cat} {ontology.names([cat])[0]}")
         if size > 0:
-            select = data.positive_labels.apply(lambda s: cat in s).index.to_list()
-            sample = random.sample(select, size)
-            print(data.loc[sample])
+            sample = data[data.positive_labels.apply(lambda s: cat in s)].index.to_list()
+            if size < len(sample):
+                sample = random.sample(sample, size)
             idx.update(sample)
     return data.loc[idx]
 
@@ -112,7 +112,7 @@ def load_selection_set(ontology, skipset=frozenset(), threshold=0.9):
     return accuracy.label[accuracy.num.sort_values().index].to_list()
 
 
-_CAT_SAMPLE_SIZE = 1
+_CAT_SAMPLE_SIZE = 1000
 
 
 def main(fname, ontology, skip_cat=None):
