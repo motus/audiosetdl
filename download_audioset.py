@@ -434,7 +434,7 @@ def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_p
 
     audio_info = {
         'sample_rate': audio_sample_rate,
-        'channels': 2,
+        'channels': 1,  # 2,
         'bitrate': audio_bit_depth,
         'encoding': audio_codec.upper(),
         'duration': duration
