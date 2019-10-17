@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import json
 import random
 import itertools
@@ -137,33 +136,7 @@ def filter_data(data, ontology, sample_size, skip_cat=None):
     return data
 
 
-def parse_fname(path):
-    fname = os.path.basename(path)[:-4]
-    split = fname.split("_")
-    ts_start, ts_end = [float(n) / 1000 for n in split[-2:]]
-    ytid = "_".join(split[:-2])
-    return (ytid, ts_start, ts_end)
-
-
-def lookup_file(data, path):
-    (ytid, ts_start, ts_end) = parse_fname(path)
-    return data[(data.YTID == ytid) &
-                (data.start_seconds == ts_start) &
-                (data.end_seconds == ts_end)]
-
-
-def rename_mturk(data, ontology, path):
-    fname = os.path.basename(path)
-    df = lookup_file(data, fname)
-    if len(df) != 1:
-        return fname  # None?
-    return "%s_%s%s" % (
-        fname[:-4], "_".join(ontology.names(df.positive_labels.iloc[0])), fname[-4:])
-
-
-_CAT_SAMPLE_SIZE = 1000
-
-if __name__ == "__main__":
+def main():
 
     ontology = Ontology("ontology.json")
     # ontology.graph(
@@ -172,8 +145,13 @@ if __name__ == "__main__":
     #     highlight=frozenset(ontology.all_children(
     #         read_categories("exclude.tsv", ontology).label)))
 
+    sample_size = 1000
     data = load_data("unbalanced_train_segments.csv", skip=3)
-    data = filter_data(data, ontology, _CAT_SAMPLE_SIZE)
+    data = filter_data(data, ontology, sample_size)
     data.positive_labels = data.positive_labels.apply(",".join)
-    data.to_csv("unbalanced_train_segments_no_human_stratified_%d.csv" % _CAT_SAMPLE_SIZE,
+    data.to_csv("unbalanced_train_segments_no_human_stratified_%d.csv" % sample_size,
                 index=False, header=False, line_terminator='\n', float_format="%.3f")
+
+
+if __name__ == "__main__":
+    main()
