@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import json
 import random
 import itertools
@@ -40,7 +41,7 @@ class Ontology:
             for node in all_nodes:
                 node_id = node['id']
                 f.write('  "%s" [label="%s"%s];\n' % (
-                        node_id, node['name'], ", style=filled" if node_id in highlight else ""))
+                    node_id, node['name'], ", style=filled" if node_id in highlight else ""))
                 children = node.get("child_ids")
                 if children:
                     f.write('  "%s" -> { "%s" };\n' % (node_id, '","'.join(children)))
@@ -112,10 +113,15 @@ def load_selection_set(ontology, skipset=frozenset(), threshold=0.9):
     return accuracy.label[accuracy.num.sort_values().index].to_list()
 
 
-_CAT_SAMPLE_SIZE = 1000
+def load_data(fname, skip=0):
+    data = pandas.read_csv(
+        fname, skiprows=skip, skipinitialspace=True, header=None,
+        names=["YTID", "start_seconds", "end_seconds", "positive_labels"])
+    data.positive_labels = data.positive_labels.apply(lambda s: frozenset(s.split(',')))
+    return data
 
 
-def main(fname, ontology, skip_cat=None):
+def filter_data(data, ontology, sample_size, skip_cat=None):
 
     skipset = frozenset()
     if skip_cat is not None:
@@ -123,18 +129,39 @@ def main(fname, ontology, skip_cat=None):
         # skip_cat = '/m/09l8g'   # human voice subcategory
         skipset = frozenset(ontology.children(skip_cat).keys())
 
-    data = pandas.read_csv(
-        fname, skiprows=3, skipinitialspace=True, header=None,
-        names=["YTID", "start_seconds", "end_seconds", "positive_labels"])
-    data.positive_labels = data.positive_labels.apply(lambda s: frozenset(s.split(',')))
-
     select = load_selection_set(ontology, skipset)
     data = data[data.positive_labels.apply(frozenset(select).issuperset)]
 
-    data = stratified_sample(data, ontology, select, _CAT_SAMPLE_SIZE)
+    data = stratified_sample(data, ontology, select, sample_size)
 
     return data
 
+
+def parse_fname(path):
+    fname = os.path.basename(path)[:-4]
+    split = fname.split("_")
+    ts_start, ts_end = [float(n) / 1000 for n in split[-2:]]
+    ytid = "_".join(split[:-2])
+    return (ytid, ts_start, ts_end)
+
+
+def lookup_file(data, path):
+    (ytid, ts_start, ts_end) = parse_fname(path)
+    return data[(data.YTID == ytid) &
+                (data.start_seconds == ts_start) &
+                (data.end_seconds == ts_end)]
+
+
+def rename_mturk(data, ontology, path):
+    fname = os.path.basename(path)
+    df = lookup_file(data, fname)
+    if len(df) != 1:
+        return fname  # None?
+    return "%s_%s%s" % (
+        fname[:-4], "_".join(ontology.names(df.positive_labels.iloc[0])), fname[-4:])
+
+
+_CAT_SAMPLE_SIZE = 1000
 
 if __name__ == "__main__":
 
@@ -145,7 +172,8 @@ if __name__ == "__main__":
     #     highlight=frozenset(ontology.all_children(
     #         read_categories("exclude.tsv", ontology).label)))
 
-    data = main("unbalanced_train_segments.csv", ontology)
+    data = load_data("unbalanced_train_segments.csv", skip=3)
+    data = filter_data(data, ontology, _CAT_SAMPLE_SIZE)
     data.positive_labels = data.positive_labels.apply(",".join)
     data.to_csv("unbalanced_train_segments_no_human_stratified_%d.csv" % _CAT_SAMPLE_SIZE,
                 index=False, header=False, line_terminator='\n', float_format="%.3f")
