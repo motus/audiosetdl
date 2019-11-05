@@ -82,6 +82,7 @@ class Ontology:
 
 
 def read_categories(fname, ontology):
+    "Read a TSV file that has (name, accuracy, and number of samples) for each category."
     data = pandas.read_csv(fname, sep="\t", header=None, names=["name", "quality", "num"])
     data.quality = data.quality.apply(lambda s: float('0' + s[:-1]) / 100.)
     data.num = data.num.apply(lambda s: int(s.replace(',', '')))
@@ -89,16 +90,21 @@ def read_categories(fname, ontology):
     return data
 
 
-def stratified_sample(data, ontology, categories, threshold):
+# pylint: disable=cell-var-from-loop
+def stratified_sample(data, ontology, categories, threshold, exclude=frozenset()):
+    "Greedy stratified sampling from given categories."
     idx = set()
-    for cat in categories:
-        size = threshold - data.loc[idx].positive_labels.apply(lambda s: cat in s).sum()
-        print(f"*** select {size} for {cat} {ontology.names([cat])[0]}")
-        if size > 0:
-            sample = data[data.positive_labels.apply(lambda s: cat in s)].index.to_list()
-            if size < len(sample):
-                sample = random.sample(sample, size)
-            idx.update(sample)
+    category_cap = {cat: 0 if cat in exclude else threshold for cat in categories}
+    for num_cat in range(10):
+        for (cat, limit) in category_cap.items():
+            size = limit - data.loc[idx].positive_labels.apply(lambda s: cat in s).sum()
+            print(f"*** select {size} for {cat} {ontology.names([cat])[0]}")
+            if size > 0:
+                sample = data[data.positive_labels.apply(
+                    lambda s: len(s) == num_cat and cat in s)].index.to_list()
+                if size < len(sample):
+                    sample = random.sample(sample, size)
+                idx.update(sample)
     return data.loc[idx]
 
 
@@ -131,12 +137,13 @@ def filter_data(data, ontology, sample_size, skip_cat=None):
     select = load_selection_set(ontology, skipset)
     data = data[data.positive_labels.apply(frozenset(select).issuperset)]
 
-    data = stratified_sample(data, ontology, select, sample_size)
+    exclude = ontology.children('/m/04rlf')  # Music
+    data = stratified_sample(data, ontology, select, sample_size, exclude)
 
     return data
 
 
-def main():
+def _main():
 
     ontology = Ontology("ontology.json")
     # ontology.graph(
@@ -145,13 +152,13 @@ def main():
     #     highlight=frozenset(ontology.all_children(
     #         read_categories("exclude.tsv", ontology).label)))
 
-    sample_size = 1000
+    sample_size = 500
     data = load_data("unbalanced_train_segments.csv", skip=3)
     data = filter_data(data, ontology, sample_size)
     data.positive_labels = data.positive_labels.apply(",".join)
-    data.to_csv("unbalanced_train_segments_no_human_stratified_%d.csv" % sample_size,
+    data.to_csv("unbalanced_train_segments_no_human_stratified_%d_2.csv" % sample_size,
                 index=False, header=False, line_terminator='\n', float_format="%.3f")
 
 
 if __name__ == "__main__":
-    main()
+    _main()
