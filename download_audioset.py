@@ -179,6 +179,15 @@ def parse_arguments():
                         default=4,
                         help='Number of multiprocessing workers used to download videos')
 
+    parser.add_argument('-nb',
+                        '--num-buckets',
+                        dest='num_buckets',
+                        action='store',
+                        type=int,
+                        default=None,
+                        help="Number of buckets to store the downloaded files"
+                             " into (default = no bucketing)")
+
     parser.add_argument('-nl',
                         '--no-logging',
                         dest='disable_logging',
@@ -318,7 +327,7 @@ def ffmpeg(ffmpeg_path, input_path, output_path, input_args=None,
         LOGGER.error(error_msg.format(num_retries, input_path, str(last_err)))
 
 
-def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_path,
+def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_path, num_buckets,
                       audio_codec='flac', audio_format='flac',
                       audio_sample_rate=48000, audio_bit_depth=16,
                       video_codec='h264', video_format='mp4',
@@ -402,7 +411,7 @@ def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_p
     # Make the output format and video URL
     # Output format is in the format:
     #   <YouTube ID>_<start time in ms>_<end time in ms>.<extension>
-    media_filename = get_media_filename(ytid, ts_start, ts_end)
+    media_filename = get_media_filename(ytid, ts_start, ts_end, num_buckets)
     video_filepath = os.path.join(output_dir, 'video', media_filename + '.' + video_format)
     audio_filepath = os.path.join(output_dir, 'audio', media_filename + '.' + audio_format)
     video_page_url = 'https://www.youtube.com/watch?v={}'.format(ytid)
@@ -530,7 +539,7 @@ def download_yt_video(ytid, ts_start, ts_end, output_dir, ffmpeg_path, ffprobe_p
 
 
 def segment_mp_worker(ytid, ts_start, ts_end, data_dir, ffmpeg_path,
-                      ffprobe_path, **ffmpeg_cfg):
+                      ffprobe_path, num_buckets, **ffmpeg_cfg):
     """
     Pool worker that downloads video segments.o
 
@@ -566,7 +575,7 @@ def segment_mp_worker(ytid, ts_start, ts_end, data_dir, ffmpeg_path,
     # Download the video
     try:
         download_yt_video(ytid, ts_start, ts_end, data_dir, ffmpeg_path,
-                          ffprobe_path, **ffmpeg_cfg)
+                          ffprobe_path, num_buckets, **ffmpeg_cfg)
     except SubprocessError as e:
         err_msg = 'Error while downloading video {}: {}; {}'.format(ytid, e, tb.format_exc())
         LOGGER.error(err_msg)
@@ -575,7 +584,7 @@ def segment_mp_worker(ytid, ts_start, ts_end, data_dir, ffmpeg_path,
         LOGGER.error(err_msg)
 
 
-def init_subset_data_dir(dataset_dir, subset_name):
+def init_subset_data_dir(dataset_dir, subset_name, num_buckets=None):
     """
     Creates the data directories for the given subset
 
@@ -596,6 +605,9 @@ def init_subset_data_dir(dataset_dir, subset_name):
     video_dir = os.path.join(data_dir, 'video')
     os.makedirs(audio_dir, exist_ok=True)
     os.makedirs(video_dir, exist_ok=True)
+    if num_buckets:
+        for i in range(num_buckets):
+            os.makedirs("%s/%03d" % (audio_dir, i), exist_ok=True)
 
     return data_dir
 
@@ -634,7 +646,7 @@ def download_subset_file(subset_url, dataset_dir):
 
 
 def download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
-                           num_workers, **ffmpeg_cfg):
+                           num_workers, num_buckets, **ffmpeg_cfg):
     """
     Download subset segment file and videos
 
@@ -675,7 +687,7 @@ def download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
                 ytid, ts_start, ts_end = row[0], float(row[1]), float(row[2])
 
                 # Skip files that already have been downloaded
-                media_filename = get_media_filename(ytid, ts_start, ts_end)
+                media_filename = get_media_filename(ytid, ts_start, ts_end, num_buckets)
                 video_filepath = os.path.join(data_dir, 'video', media_filename + '.' + ffmpeg_cfg.get('video_format', 'mp4'))
                 audio_filepath = os.path.join(data_dir, 'audio', media_filename + '.' + ffmpeg_cfg.get('audio_format', 'flac'))
                 if os.path.exists(audio_filepath):
@@ -687,7 +699,7 @@ def download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
                 #     LOGGER.info(info_msg.format(ytid, ts_start, ts_end))
                 #     continue
 
-                worker_args = [ytid, ts_start, ts_end, data_dir, ffmpeg_path, ffprobe_path]
+                worker_args = [ytid, ts_start, ts_end, data_dir, ffmpeg_path, ffprobe_path, num_buckets]
                 pool.apply_async(partial(segment_mp_worker, **ffmpeg_cfg), worker_args)
                 # Run serially
                 #segment_mp_worker(*worker_args, **ffmpeg_cfg)
@@ -711,7 +723,7 @@ def download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
 
 
 def download_random_subset_files(subset_url, dataset_dir, ffmpeg_path, ffprobe_path,
-                                 num_workers, max_videos=None,  **ffmpeg_cfg):
+                                 num_workers, num_buckets, max_videos=None,  **ffmpeg_cfg):
     """
     Download a a random subset (of size `max_videos`) of subset segment file and videos
 
@@ -751,7 +763,7 @@ def download_random_subset_files(subset_url, dataset_dir, ffmpeg_path, ffprobe_p
     subset_filename = get_filename(subset_url)
     subset_name = get_subset_name(subset_url)
     subset_path = os.path.join(dataset_dir, subset_filename)
-    data_dir = init_subset_data_dir(dataset_dir, subset_name)
+    data_dir = init_subset_data_dir(dataset_dir, subset_name, num_buckets)
 
     # Open subset file as a CSV
     if not os.path.exists(subset_path):
@@ -783,7 +795,7 @@ def download_random_subset_files(subset_url, dataset_dir, ffmpeg_path, ffprobe_p
     pool = mp.Pool(num_workers)
     try:
         for idx, row in enumerate(subset_data):
-            worker_args = [row[0], float(row[1]), float(row[2]), data_dir, ffmpeg_path, ffprobe_path]
+            worker_args = [row[0], float(row[1]), float(row[2]), data_dir, ffmpeg_path, ffprobe_path, num_buckets]
             pool.apply_async(partial(segment_mp_worker, **ffmpeg_cfg), worker_args)
             # Run serially
             #segment_mp_worker(*worker_args, **ffmpeg_cfg)
@@ -808,7 +820,7 @@ def download_random_subset_files(subset_url, dataset_dir, ffmpeg_path, ffprobe_p
 
 
 def download_subset(subset_path, dataset_dir, ffmpeg_path, ffprobe_path,
-                    num_workers, **ffmpeg_cfg):
+                    num_workers, num_buckets, **ffmpeg_cfg):
     """
     Download all files for a subset, including the segment file, and the audio and video files.
 
@@ -840,16 +852,16 @@ def download_subset(subset_path, dataset_dir, ffmpeg_path, ffprobe_path,
         subset_path = download_subset_file(subset_path, dataset_dir)
 
     subset_name = get_subset_name(subset_path)
-    data_dir = init_subset_data_dir(dataset_dir, subset_name)
+    data_dir = init_subset_data_dir(dataset_dir, subset_name, num_buckets)
 
     download_subset_videos(subset_path, data_dir, ffmpeg_path, ffprobe_path,
-                           num_workers, **ffmpeg_cfg)
+                           num_workers, num_buckets, **ffmpeg_cfg)
 
 
 def download_audioset(data_dir, ffmpeg_path, ffprobe_path, eval_segments_path,
                       balanced_train_segments_path, unbalanced_train_segments_path,
                       disable_logging=False, verbose=False, num_workers=4,
-                      log_path=None, **ffmpeg_cfg):
+                      num_buckets=None, log_path=None, **ffmpeg_cfg):
     """
     Download AudioSet files
 
@@ -901,15 +913,15 @@ def download_audioset(data_dir, ffmpeg_path, ffprobe_path, eval_segments_path,
 
     if eval_segments_path:
         download_subset(eval_segments_path, data_dir, ffmpeg_path, ffprobe_path,
-                        num_workers, **ffmpeg_cfg)
+                        num_workers, num_buckets, **ffmpeg_cfg)
 
     if balanced_train_segments_path:
         download_subset(balanced_train_segments_path, data_dir, ffmpeg_path, ffprobe_path,
-                        num_workers, **ffmpeg_cfg)
+                        num_workers, num_buckets, **ffmpeg_cfg)
 
     if unbalanced_train_segments_path:
         download_subset(unbalanced_train_segments_path, data_dir, ffmpeg_path, ffprobe_path,
-                        num_workers, **ffmpeg_cfg)
+                        num_workers, num_buckets, **ffmpeg_cfg)
 
 
 if __name__ == '__main__':

@@ -72,7 +72,7 @@ def get_filename(path):
     return os.path.basename(path).split('?')[0]
 
 
-def get_media_filename(ytid, ts_start, ts_end):
+def get_media_filename(ytid, ts_start, ts_end, num_buckets=None):
     """
     Get the filename (without extension) for a media file (audio or video) for a YouTube video segment
 
@@ -90,8 +90,11 @@ def get_media_filename(ytid, ts_start, ts_end):
         media_filename:  Filename (without extension) for segment media file
                          (Type: str)
     """
-    tms_start, tms_end = int(ts_start * 1000), int(ts_end * 1000)
-    return '{}_{}_{}'.format(ytid, tms_start, tms_end)
+    # tms_start, tms_end = int(ts_start * 1000), int(ts_end * 1000)
+    # return '{}_{}_{}'.format(ytid, tms_start, tms_end)
+    if num_buckets:
+        return "%03d/%s" % (hash(ytid) % num_buckets, ytid)
+    return ytid
 
 
 def get_subset_name(subset_path):
