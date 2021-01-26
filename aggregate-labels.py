@@ -31,11 +31,11 @@ for (i, label) in enumerate(data.columns):
 res = pandas.DataFrame(columns=['filename', 'music', 'speech', 'noise'])
 for i in range(len(data)):
     row = data.iloc[i]
-    res.append([
+    res.loc[i] = [
         row[0],
         row[index_music].sum(),
         row[index_speech].sum(),
         row[index_noise].sum()
-    ], ignore_index=True)
+    ]
 
 res.to_csv("mobileNet_trainingdata_V1_labels_3way.csv.bz2")
