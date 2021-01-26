@@ -38,4 +38,5 @@ for i in range(len(data)):
         row[index_noise].sum()
     ]
 
-res.to_csv("mobileNet_trainingdata_V1_labels_3way.csv.bz2")
+res.to_csv("mobileNet_trainingdata_V1_labels_3way.csv.bz2",
+           index=False, header=True, line_terminator='\n', float_format="%.5f")
