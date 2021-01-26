@@ -5,3 +5,6 @@ __pycache__/
 /audiosetdl.log
 /*.csv
 /*.txt
+*.bz2
+*.dot
+*.png
