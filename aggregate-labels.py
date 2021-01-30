@@ -5,10 +5,9 @@ import argparse
 import pandas
 import ontology
 
-_LABEL_THRESHOLD = 0.6
 
-
-def aggregate_labels(fname_input, fname_3way, fname_audioset):
+def aggregate_labels(fname_input, fname_3way, fname_audioset,
+                     threshold=0.6):
     """
     Read a CSV file produced by PANN inference and aggregate
     the data within speech, music, and noise categories.
@@ -55,16 +54,16 @@ def aggregate_labels(fname_input, fname_3way, fname_audioset):
     res['end'] = 10.0
 
     # Top-level music category
-    res.loc[res.music >= _LABEL_THRESHOLD, 'labels'] = \
-        res.loc[res.music >= _LABEL_THRESHOLD, 'labels'].apply('/m/04rlf,'.__add__)
+    res.loc[res.music >= threshold, 'labels'] = \
+        res.loc[res.music >= threshold, 'labels'].apply('/m/04rlf,'.__add__)
 
     # Top-level speech category
-    res.loc[res.speech >= _LABEL_THRESHOLD, 'labels'] = \
-        res.loc[res.speech >= _LABEL_THRESHOLD, 'labels'].apply('/m/09l8g,'.__add__)
+    res.loc[res.speech >= threshold, 'labels'] = \
+        res.loc[res.speech >= threshold, 'labels'].apply('/m/09l8g,'.__add__)
 
     # Top-level category: Sounds of things
-    res.loc[res.noise >= _LABEL_THRESHOLD, 'labels'] = \
-        res.loc[res.noise >= _LABEL_THRESHOLD, 'labels'].apply('/t/dd00041,'.__add__)
+    res.loc[res.noise >= threshold, 'labels'] = \
+        res.loc[res.noise >= threshold, 'labels'].apply('/t/dd00041,'.__add__)
 
     res['labels'] = res.labels.apply(lambda s: s.strip(','))
 
@@ -74,7 +73,9 @@ def aggregate_labels(fname_input, fname_3way, fname_audioset):
 
 
 def _main():
+
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "input",
         help="Input CSV file as produced by PANN inference.py."
@@ -84,9 +85,17 @@ def _main():
         help="Output CSV file for the aggregated data. Can be .bz2")
     parser.add_argument(
         "audioset",
-        help="Output CSV file for AudioSet-compatible data. Can be .bz2")
+        help="Output CSV file for AudioSet-compatible data."
+             " Can be .bz2")
+    parser.add_argument(
+        "--threshold", type=int, default=0.6,
+        help="Inclusion threshold for the AudioSet-compatible labels."
+             " Default = 0.6")
+
     args = parser.parse_args()
-    aggregate_labels(args.input, args.three_way, args.audioset)
+
+    aggregate_labels(args.input, args.three_way, args.audioset,
+                     args.threshold)
 
 
 if __name__ == "__main__":
