@@ -67,9 +67,10 @@ def aggregate_labels(fname_input, fname_3way, fname_audioset,
 
     res['labels'] = res.labels.apply(lambda s: s.strip(','))
 
-    res[['filename', 'start', 'end', 'labels']].to_csv(
-        fname_audioset, index=False, header=False,
-        line_terminator='\n', float_format="%.1f")
+    res.loc[res.labels != "",
+            ['filename', 'start', 'end', 'labels']].to_csv(
+                fname_audioset, index=False, header=False,
+                line_terminator='\n', float_format="%.1f")
 
 
 def _main():
@@ -88,7 +89,7 @@ def _main():
         help="Output CSV file for AudioSet-compatible data."
              " Can be .bz2")
     parser.add_argument(
-        "--threshold", type=int, default=0.6,
+        "--threshold", type=float, default=0.6,
         help="Inclusion threshold for the AudioSet-compatible labels."
              " Default = 0.6")
 
